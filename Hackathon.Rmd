@@ -1,0 +1,685 @@
+---
+title: "IE 6600 Section 01 Group 25 Hackathon "
+author: "Aryak Bodkhe, Rishika Reddy, Saurabh Borse"
+date: "2023-02-08"
+output: html_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# FITNESS TRACKER
+
+### INTRODUCTION and PROBLEM STATEMENT
+
+The aim of this report is to analyze the data collected from a Fitness
+tracker, which is a wearable device designed to track various aspects of
+an individual's physical activity, such as steps taken, distance
+traveled, calories burned, and heart rate. The data analyzed in this
+report was collected over a specified period of time and provides
+insights into the physical activity patterns of 33 individuals wearing
+the device.
+
+This report will present the findings of the data analysis, including
+trends and patterns in the individuals' physical activities, as well as
+any correlations between different aspects of the data. The report will
+also highlight any notable achievements or changes in the individuals'
+physical activities during the specified period of time.
+
+This report is distributed in three sections.
+
+-   **Section 1:** Analysis of users' daily activities
+
+-   **Section 2:** Analysis of steps taken and sleep patterns
+
+-   **Section 3:** Analysis of Calories burnt. Overall, this report aims
+    to provide a comprehensive overview of users' physical activity as
+    recorded by their Fitness tracker, and will serve as a valuable tool
+    for understanding their fitness level, tracking their progress, and
+    identifying areas for improvement.
+
+```{r, echo=FALSE, warning=FALSE}
+#libraries
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(tidyr))
+suppressPackageStartupMessages(library(reshape2))
+suppressPackageStartupMessages(library(plotly))
+suppressPackageStartupMessages(library(patchwork))
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(janitor))
+suppressPackageStartupMessages(library(lubridate))
+
+
+```
+
+```{r, echo=FALSE, warning=FALSE}
+#Reading csv files
+dailyAct <- read.csv("/Users/aryakbodkhe/Desktop/Comp Viz/Hackathon/Fitabase Data 4.12.16-5.12.16/dailyActivity_merged.csv", na.strings = "")
+dailyCal <- read.csv("/Users/aryakbodkhe/Desktop/Comp Viz/Hackathon/Fitabase Data 4.12.16-5.12.16/dailyCalories_merged.csv", na.strings = "")
+dailyInt <- read.csv("/Users/aryakbodkhe/Desktop/Comp Viz/Hackathon/Fitabase Data 4.12.16-5.12.16/dailyIntensities_merged.csv", na.strings = "")
+dailySteps <- read.csv("/Users/aryakbodkhe/Desktop/Comp Viz/Hackathon/Fitabase Data 4.12.16-5.12.16/dailySteps_merged.csv", na.strings = "")
+dailySleep <- read.csv("/Users/aryakbodkhe/Desktop/Comp Viz/Hackathon/Fitabase Data 4.12.16-5.12.16/sleepDay_merged.csv", na.strings = "")
+weights <- read.csv("/Users/aryakbodkhe/Desktop/Comp Viz/Hackathon/Fitabase Data 4.12.16-5.12.16/weightLogInfo_merged.csv", na.strings = "")
+
+```
+
+```{r, echo=FALSE, warning=FALSE}
+#Cleaning the data
+
+#Cleaned the date columns to make them same and transformed them to the right data type, before merging the datasets.
+
+dailyAct <- dailyAct %>% 
+  rename(Date = ActivityDate) %>% 
+  mutate(Date = as.Date(Date, format = "%m/%d/%y"))
+
+dailySleep <- dailySleep %>% 
+  rename(Date = SleepDay) %>% 
+  mutate(Date = as.Date(Date, format = "%m/%d/%y"))
+
+weights <- weights %>% 
+  select(-LogId) %>% 
+  mutate(Date = as.Date(Date, format = "%m/%d/%y")) %>% 
+  mutate(IsManualReport = as.factor(IsManualReport))
+```
+
+```{r, echo=FALSE, warning=FALSE}
+data <- merge(merge(dailyAct, dailySleep, by = c('Id', 'Date'), all = TRUE), weights, by = c('Id', 'Date'), all = TRUE)
+
+merge_1 <- merge(dailyAct, dailyCal, by = c("Id","Calories"))
+merge_2 <- merge(dailyInt, dailyInt, by = c("Id","ActivityDay","SedentaryMinutes", "LightlyActiveMinutes","FairlyActiveMinutes","VeryActiveMinutes", "SedentaryActiveDistance", "LightActiveDistance", "ModeratelyActiveDistance", "VeryActiveDistance"))
+
+merge_daily <- merge(merge_1, merge_2, by = c("Id","ActivityDay","SedentaryMinutes", "LightlyActiveMinutes","FairlyActiveMinutes","VeryActiveMinutes", "SedentaryActiveDistance", "LightActiveDistance", "ModeratelyActiveDistance", "VeryActiveDistance"))
+  
+#select(-ActivityDay) %>% rename(Date = ActivityDate)
+
+daily_data <- merge(merge_daily, dailySleep, by = "Id",all=TRUE)
+```
+
+```{r, echo=FALSE, warning=FALSE}
+#Removing some extra variables in the final (merged) data
+
+#Looking at the final dataset, we observed that the columns TotalDistances and TrackerDistances are identical. Based on this, one of columns is deleted for the analysis. We also deleted some other variables that aren't useful for our analysis.
+
+data <- data %>% select(-c(TrackerDistance, LoggedActivitiesDistance, TotalSleepRecords, WeightPounds, Fat, BMI, IsManualReport))
+```
+
+```{r, echo=FALSE, warning=FALSE}
+#Setting up a common theme for our plots
+custom_theme <- function() {
+  theme(
+    panel.border = element_rect(colour = "black", 
+                                fill = NA, 
+                                linetype = 1),
+    panel.background = element_rect(fill = "white", 
+                                    color = 'grey50'),
+    panel.grid.minor.y = element_blank(),
+    axis.text = element_text(colour = "black", 
+                             face = "italic", 
+                             family = "Helvetica"),
+    axis.title = element_text(colour = "black", 
+                              family = "Helvetica"),
+    axis.ticks = element_line(colour = "black"),
+    plot.title = element_text(size=23, 
+                              hjust = 0.5, 
+                              family = "Helvetica"),
+    plot.subtitle=element_text(size=16, 
+                               hjust = 0.5),
+    plot.caption = element_text(colour = "black", 
+                             face = "italic", 
+                             family = "Helvetica")
+  )
+}
+```
+
+### SECTION 1:
+
+### Analysis of users' daily activity
+
+**Q. What is the distribution of users' daily activity in a week?**
+
+```{r, echo=FALSE, warning=FALSE}
+data %>% 
+  mutate(weekdays = weekdays(Date)) %>% 
+  select(weekdays, TotalSteps) %>%
+  mutate(weekdays = factor(weekdays, levels = c('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'))) %>% 
+  drop_na() %>% 
+  ggplot(aes(weekdays, TotalSteps, fill = weekdays)) +
+  geom_boxplot() +
+  custom_theme() +
+  scale_fill_brewer(palette="Pastel") +
+  theme(legend.position="none") +
+  labs(
+    title = "Users' activity by day",
+    x = "Day of the week",
+    y = "Steps",
+  )
+```
+
+**Insight:** The above visualization plot shows all the 33 users' daily
+activity by steps and we can observe that the difference between the
+days of the week is minimal.
+
+**Q: What is the percentage of users that are lightly active (steps in
+minutes)?**
+
+```{r, echo=FALSE, warning=FALSE}
+pie_chart <- data %>% select(VeryActiveMinutes, 
+         FairlyActiveMinutes, 
+         LightlyActiveMinutes, 
+         SedentaryMinutes) %>%
+  summarise(across(everything(), list(sum))) %>% 
+  gather(active_level, minutes) %>% 
+  mutate(active_level = factor(active_level, 
+                          labels = c('Moderate Activity','Light Activity',
+                                     'Sedentary','Heavy Activity')))
+
+
+fig <- plot_ly(pie_chart, labels = ~active_level, values = ~minutes, type = 'pie', textposition = 'inside', textinfo = 'label+percent',  marker = list(colors = c("lightsalmon","palegreen","lightblue4","darkgreen")))
+
+fig <- fig %>% layout (title= 'Distribution of daily activities of users (steps)',
+                      xaxis = list(showgrid = FALSE, zeroline = FALSE, shoqticklabels = FALSE),
+                      yaxis = list(showgrid = FALSE, zeroline = FALSE, shoqticklabels = FALSE))
+fig
+```
+
+**Insight:** This visualization chart shows the distribution of users'
+daily activity(steps) in minutes. We observed that only 1.12% of users'
+do moderate activity and only 1.74% of the users' do heavy activity
+daily. Large amount of users (81.3%) are sedentary. 15.8% of the users
+are lightly active.
+
+**Q: What is the percentage of users that are lightly active (calories
+burnt)?**
+
+```{r, echo=FALSE,warning=FALSE}
+#With this new table we can now visualize both the user type distribution and the calories burned for every user type:
+daily_data <- data %>%
+summarise(user_type = factor(case_when(
+    SedentaryMinutes > mean(SedentaryMinutes) & LightlyActiveMinutes < mean(LightlyActiveMinutes) & FairlyActiveMinutes < mean(FairlyActiveMinutes) & VeryActiveMinutes < mean(VeryActiveMinutes) ~ "Sedentary",
+    SedentaryMinutes < mean(SedentaryMinutes) & LightlyActiveMinutes > mean(LightlyActiveMinutes) & FairlyActiveMinutes < mean(FairlyActiveMinutes) & VeryActiveMinutes < mean(VeryActiveMinutes) ~ "Lightly Active",
+    SedentaryMinutes < mean(SedentaryMinutes) & LightlyActiveMinutes < mean(LightlyActiveMinutes) & FairlyActiveMinutes > mean(FairlyActiveMinutes) & VeryActiveMinutes < mean(VeryActiveMinutes) ~ "Fairly Active",
+    SedentaryMinutes < mean(SedentaryMinutes) & LightlyActiveMinutes < mean(LightlyActiveMinutes) & FairlyActiveMinutes < mean(FairlyActiveMinutes) & VeryActiveMinutes > mean(VeryActiveMinutes) ~ "Very Active",
+),levels=c("Sedentary", "Lightly Active", "Fairly Active", "Very Active")), Calories, .group=Id) %>%
+
+drop_na()
+
+pie_chart1 <- daily_data %>%
+group_by(user_type) %>%
+summarise(total = n()) %>%
+mutate(totals = sum(total)) %>%
+group_by(user_type) %>%
+summarise(total_percent = total / totals)
+
+fig1 <- plot_ly(pie_chart1, labels = ~user_type, values = ~total_percent, type = 'pie', textposition = 'inside', textinfo = 'label+percent',  marker = list(colors = c("lightsalmon","darkgreen","lightblue4","palegreen")))
+
+fig1 <- fig1 %>% layout (title= 'Distribution of daily activities of users (calories burnt)',
+                      xaxis = list(showgrid = FALSE, zeroline = FALSE, shoqticklabels = FALSE),
+                      yaxis = list(showgrid = FALSE, zeroline = FALSE, shoqticklabels = FALSE))
+fig1
+```
+
+**Insight:** Here, we are analyzing the percentage of calories burnt by
+the users with different active levels. And it is observed that 57.2%
+are sedentary based on the calories that they burnt. 32.4% of the users
+are lightly active.
+
+### SECTION 2 : 
+
+### Analysis of the steps taken and sleep patterns of User
+
+```{r,echo=FALSE, warning=FALSE}
+#install.packages("ggrepel")
+#Dataframes
+df_daily_activity<- read.csv("/Users/aryakbodkhe/Desktop/Comp Viz/Hackathon/Fitabase Data 4.12.16-5.12.16/dailyActivity_merged.csv", na.strings = "")
+df_sleep<- read.csv("/Users/aryakbodkhe/Desktop/Comp Viz/Hackathon/Fitabase Data 4.12.16-5.12.16/sleepDay_merged.csv", na.strings = "")
+df_hourly_step_count<- read.csv("/Users/aryakbodkhe/Desktop/Comp Viz/Hackathon/Fitabase Data 4.12.16-5.12.16/hourlySteps_merged.csv", na.strings = "")
+```
+
+```{r,echo=FALSE, warning=FALSE}
+#head(df_daily_activity)
+#head(df_sleep )
+#head(df_hourly_step_count)
+```
+
+```{r,echo=FALSE, warning=FALSE}
+#n_unique(df_daily_activity$Id)
+#n_unique(df_sleep$Id)
+#n_unique(df_hourly_step_count$Id)
+```
+
+```{r,echo=FALSE, warning=FALSE}
+#sum(duplicated(df_daily_activity))
+#sum(duplicated(df_sleep))
+#sum(duplicated(df_hourly_step_count))
+```
+
+```{r,echo=FALSE, warning=FALSE}
+df_daily_activity <- df_daily_activity %>%
+  distinct() %>%
+  drop_na()
+
+df_sleep <- df_sleep %>%
+  distinct() %>%
+  drop_na()
+
+df_hourly_step_count <- df_hourly_step_count %>%
+  distinct() %>%
+  drop_na()
+```
+
+```{r,echo=FALSE, warning=FALSE}
+#clean_names(df_daily_activity)
+df_daily_activity<- rename_with(df_daily_activity, tolower)
+
+#clean_names(df_sleep)
+df_sleep <- rename_with(df_sleep, tolower)
+
+#clean_names(df_hourly_step_count)
+df_hourly_step_count <- rename_with(df_hourly_step_count, tolower)
+```
+
+```{r,echo=FALSE, warning=FALSE}
+df_daily_activity <- df_daily_activity %>%
+  rename(date = activitydate) %>%
+  mutate(date = as_date(date, format = "%m/%d/%Y"))
+
+df_sleep <- df_sleep %>%
+  rename(date = sleepday) %>%
+  mutate(date = as_date(date,format ="%m/%d/%Y %I:%M:%S %p" , tz=Sys.timezone()))
+
+
+```
+
+```{r,echo=FALSE, warning=FALSE}
+df_hourly_step_count<- df_hourly_step_count %>% 
+  rename(date_time = activityhour) %>% 
+  mutate(date_time = as.POSIXct(date_time,format ="%m/%d/%Y %I:%M:%S %p" , tz=Sys.timezone()))
+
+
+```
+
+```{r,echo=FALSE, warning=FALSE}
+#Merging the datasets
+activity_sleep_merged <- merge(df_daily_activity, df_sleep, by=c ("id", "date"))
+
+```
+
+```{r,echo=FALSE, warning=FALSE}
+timeoftheday_steps_sleep <- activity_sleep_merged %>%
+  mutate(weekday = weekdays(date))
+
+timeoftheday_steps_sleep$weekday <-ordered(timeoftheday_steps_sleep$weekday, levels=c("Monday", "Tuesday", "Wednesday", "Thursday",
+"Friday", "Saturday", "Sunday"))
+
+ timeoftheday_steps_sleep <-timeoftheday_steps_sleep%>%
+  group_by(weekday) %>%
+  summarize (daily_steps = mean(totalsteps), daily_sleep = mean(totalminutesasleep))
+
+
+```
+
+```{r,echo=FALSE, warning=FALSE}
+df_hourly_step_count <- df_hourly_step_count %>%
+  separate(date_time, into = c("date", "time"), sep= " ") %>%
+  mutate(date = ymd(date)) 
+  
+#head(df_hourly_step_count)
+```
+
+**Q. What is the distribution of Steps of users throughout the day?**
+
+```{r,echo=FALSE, warning=FALSE}
+df_hourly_step_count %>%
+  group_by(time) %>%
+  summarize(average_steps = mean(steptotal)) %>%
+  ggplot() +
+  geom_col(mapping = aes(x=time, y = average_steps, fill = average_steps)) + 
+  custom_theme() +
+  scale_fill_gradient(low = "#66CC99", high = "tan1")+
+  theme(axis.text.x = element_text(angle = 90))+
+  labs(
+    title = "Hourly steps throughout the day",
+    x = "",y="",
+    caption = 'Data Source: FitBit Fitness Tracker Data'
+  )
+  
+```
+
+**Insight :** The above visualization plot shows the average hourly
+steps of all the 32 users in a particular day. From what we can observe
+from this plot is that all the users in average are more active between
+the time of 8am and 7pm. Majorly step count increases between the time
+of 5pm and 8pm.
+
+**Q. What is the sleep distribution of users throughout the day?**
+
+```{r,echo=FALSE, warning=FALSE}
+activity_sleep_merged %>% 
+  select(totalminutesasleep) %>% 
+  drop_na() %>% 
+  mutate(sleep_quality = ifelse(totalminutesasleep <= 420, 'Less than 7h',
+                         ifelse(totalminutesasleep <= 540, '7h to 9h', 
+                         'More than 9h'))) %>%
+  mutate(sleep_quality = factor(sleep_quality, 
+                          levels = c('Less than 7h','7h to 9h',
+                                     'More than 9h'))) %>% 
+  ggplot(aes(x = totalminutesasleep, fill = sleep_quality)) +
+  geom_histogram(position = 'dodge', bins = 30) +
+  custom_theme() +
+  scale_fill_brewer(palette='Pastel2')+
+  #scale_fill_manual(values=c("tan1", "#66CC99", "lightcoral")) +
+  theme(legend.position = c(.80, .80),
+        legend.title = element_blank(),
+        legend.spacing.y = unit(0, "mm"), 
+        panel.border = element_rect(colour = "black", fill=NA),
+        legend.background = element_blank(),
+        legend.box.background = element_rect(colour = "black")) +
+  labs(
+    title = "Sleep distribution",
+    x = "Time slept (minutes)",
+    y = "Count",
+    caption = 'Data Source: FitBit Fitness Tracker Data'
+  )
+```
+
+**Insight :** Now here, we our analysing the sleep distribution of all
+user in minutes. From this visualization we can determine how many users
+have a sound sleep. Good and healthy sleep range must be between 7hr to
+9hr range i.e, between 630 and 720 minutes.
+
+However the above visualization shows that majority of users average
+minutes of sleep, following a normal distribution. A majority of users
+sleep approximately 320 to 530 minutes.
+
+Getting deeper into the analysis, we come up with this question.
+
+**Q. Is there a correlation between sleep time and distance travelled by
+the fit bit users?**
+
+```{r,echo=FALSE, warning=FALSE}
+activity_sleep_merged %>% 
+  select(id, totaldistance, totalminutesasleep) %>% 
+  group_by(id) %>% 
+  summarise_all(list(~mean(., na.rm=TRUE))) %>% 
+  drop_na() %>% 
+  mutate(id = factor(id)) %>% 
+  ggplot() +
+  custom_theme() +
+  geom_bar(aes(x = id, y = totaldistance), ,stat = "identity", fill = '#66CC99', alpha = 0.7)+ 
+  #scale_fill_manual(values=c("tan1", "#66CC99", "lightcoral")) +
+  scale_fill_brewer(palette='Paired')+
+  geom_point(aes(x = id, y = totalminutesasleep/60), color = 'tan1', size=2) +
+  geom_segment(aes(x = id, xend = id, y = 0, yend = totalminutesasleep/60), color = 'tan1' ,group = 1) +
+  scale_y_continuous(limits=c(0, 12), name = "Total Distance", 
+  sec.axis = sec_axis(~.*60, name = "Sleep in minutes")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(
+    title = "Average distance vs average sleep by user",
+    x = "Users",
+    caption = 'Data Source: FitBit Fitness Tracker Data'
+  )
+```
+
+**Insight :** Now we want to determine whether the step counts has a
+correlation with the sleep time and how basically it affects the sleep
+time of the users. To determine this, correlation we have decided to
+plot between the total distance travelled by the users in a day with
+total sleep time of user in minutes.
+
+What we can infer from this plot is that covering a greater distance
+doesn't necessarily mean that the user is going to have a better sleep
+(on average).
+
+Let's confirm this theory with the next question.
+
+**Q. Does the amount of steps taken affect the sleep quality of the
+users?**
+
+```{r,echo=FALSE,warning=FALSE}
+activity_sleep_merged %>% 
+  select(totalminutesasleep, totalsteps) %>% 
+  mutate(sleep_quality = ifelse(totalminutesasleep <= 420, 'Less than 7h',
+                         ifelse(totalminutesasleep <= 540, '7h to 9h', 
+                         'More than 9h'))) %>% 
+  mutate(active_level = ifelse(totalsteps >= 15000,'More than 15,000 steps',
+                        ifelse(totalsteps >= 10000,'10,000 to 14,999 steps',
+                        ifelse(totalsteps >= 5000, '5,000 to 9,999 steps',
+                        'Less than 4,999 steps')))) %>% 
+  select(-c(totalminutesasleep, totalsteps)) %>% 
+  drop_na() %>% 
+  group_by(sleep_quality, active_level) %>% 
+  summarise(counts = n()) %>% 
+  mutate(active_level = factor(active_level, 
+                                levels = c('Less than 4,999 steps',
+                                           '5,000 to 9,999 steps',
+                                           '10,000 to 14,999 steps',
+                                           'More than 15,000 steps'))) %>% 
+  mutate(sleep_quality = factor(sleep_quality, 
+                          levels = c('Less than 7h','7h to 9h',
+                                     'More than 9h'))) %>% 
+  ggplot(aes(x = sleep_quality, 
+             y = counts, 
+              fill = sleep_quality)) +
+  geom_bar(stat = "identity") +
+  custom_theme() +
+  scale_fill_brewer(palette='Pastel2')+
+  #scale_fill_manual(values=c("tan1", "#66CC99", "lightcoral")) +
+  facet_wrap(~active_level, nrow = 1) +
+  theme(legend.position = "none") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme(strip.text = element_text(colour = 'black', size = 8)) +
+  theme(strip.background = element_rect(fill = "beige", color = 'black'))+
+  labs(
+    title = "Sleep quality by steps",
+    x = "Sleep quality",
+    y = "Step Count",
+    caption = 'Data Source: FitBit Fitness Tracker Data'
+  )
+
+```
+
+**Insight:** Now as mentioned earlier we know that the good quality of
+sleep have the time range between 7hr to 9hr.
+
+As we could not infer much from the earlier graph. We here are trying to
+focus on the best sleep quality and what we infer is that on average the
+best sleep is achieve when the total steps during the day are between
+5000 steps and 14,999 steps. The optimal steps range to have a good
+sleep quality is between 5,000 and 9,999.
+
+### SECTION 3: 
+
+### Analysis of Calories burnt by users
+
+Burning calories through exercise is one of the crucial part for the
+healthy lifestyle. Fitness tracker are accurate enough to measure
+calorie burns throughout the day. The number of calories burnt for each
+user is definitive to understand users' health habits as well as
+tracking the progress of their regimen.
+
+```{r, echo=FALSE, warning=FALSE}
+dailyActivity_merged <- read.csv("/Users/aryakbodkhe/Desktop/Comp Viz/Hackathon/Fitabase Data 4.12.16-5.12.16/dailyActivity_merged.csv")
+dailyCalories_merged <- read.csv("/Users/aryakbodkhe/Desktop/Comp Viz/Hackathon/Fitabase Data 4.12.16-5.12.16/dailyCalories_merged.csv")
+dailyIntensities_merged <- read.csv("/Users/aryakbodkhe/Desktop/Comp Viz/Hackathon/Fitabase Data 4.12.16-5.12.16/dailyIntensities_merged.csv")
+dailySteps_merged <- read.csv("/Users/aryakbodkhe/Desktop/Comp Viz/Hackathon/Fitabase Data 4.12.16-5.12.16/dailySteps_merged.csv")
+sleepDay_merged <- read.csv("/Users/aryakbodkhe/Desktop/Comp Viz/Hackathon/Fitabase Data 4.12.16-5.12.16/sleepDay_merged.csv")
+weightLogInfo_merged <- read.csv("/Users/aryakbodkhe/Desktop/Comp Viz/Hackathon/Fitabase Data 4.12.16-5.12.16/weightLogInfo_merged.csv")
+hourly_calories <- read.csv("/Users/aryakbodkhe/Desktop/Comp Viz/Hackathon/Fitabase Data 4.12.16-5.12.16/hourlyCalories_merged.csv")
+
+#DATA operations:
+  
+#Here I join all the daily tables data and the sleep data. They share the Id and date columns so it easy to simply merge them by Id and then leave only one date column.
+merge_1 <- merge(dailyActivity_merged, dailyCalories_merged, by = c("Id","Calories"))
+merge_2 <- merge(dailyIntensities_merged, dailyIntensities_merged, by = c("Id","ActivityDay","SedentaryMinutes", "LightlyActiveMinutes","FairlyActiveMinutes","VeryActiveMinutes", "SedentaryActiveDistance", "LightActiveDistance", "ModeratelyActiveDistance", "VeryActiveDistance"))
+
+merge_daily <- merge(merge_1, merge_2, by = c("Id","ActivityDay","SedentaryMinutes", "LightlyActiveMinutes","FairlyActiveMinutes","VeryActiveMinutes", "SedentaryActiveDistance", "LightActiveDistance", "ModeratelyActiveDistance", "VeryActiveDistance")) %>%
+select(-ActivityDay) %>% rename(Date = ActivityDate)
+
+daily_data <- merge(merge_daily, sleepDay_merged, by = "Id",all=TRUE) %>% drop_na() %>% select(-SleepDay, -TrackerDistance)
+
+options(repr.plot.width=30)
+
+#In order to better visualize the data I will group the user into four categories based on for which of their activity types they have more minutes, this will be very useful to quickly see patterns and visualize them:
+data_by_usertype <- daily_data %>%
+summarise(user_type = factor(case_when(
+    SedentaryMinutes > mean(SedentaryMinutes) & LightlyActiveMinutes < mean(LightlyActiveMinutes) & FairlyActiveMinutes < mean(FairlyActiveMinutes) & VeryActiveMinutes < mean(VeryActiveMinutes) ~ "Sedentary",
+    SedentaryMinutes < mean(SedentaryMinutes) & LightlyActiveMinutes > mean(LightlyActiveMinutes) & FairlyActiveMinutes < mean(FairlyActiveMinutes) & VeryActiveMinutes < mean(VeryActiveMinutes) ~ "Lightly Active",
+    SedentaryMinutes < mean(SedentaryMinutes) & LightlyActiveMinutes < mean(LightlyActiveMinutes) & FairlyActiveMinutes > mean(FairlyActiveMinutes) & VeryActiveMinutes < mean(VeryActiveMinutes) ~ "Fairly Active",
+    SedentaryMinutes < mean(SedentaryMinutes) & LightlyActiveMinutes < mean(LightlyActiveMinutes) & FairlyActiveMinutes < mean(FairlyActiveMinutes) & VeryActiveMinutes > mean(VeryActiveMinutes) ~ "Very Active",
+),levels=c("Sedentary", "Lightly Active", "Fairly Active", "Very Active")), Calories, .group=Id) %>%
+drop_na()
+
+```
+
+**Q1. Does burning calories have correlation with the type of users
+based on how active they are?**
+
+```{r , echo=FALSE, warning=FALSE}
+
+ggplot(data_by_usertype, aes(user_type, Calories, fill=user_type)) +
+    geom_boxplot(alpha=0.5) +
+    theme(legend.position="none") +
+    custom_theme()+
+    scale_fill_brewer(palette = "Pastel")+
+    labs(title="Calories burned by the User type", x=NULL) +
+    theme(legend.position="none", text = element_text(size = 20),plot.title = element_text(hjust = 0.5))
+
+```
+
+**Insight:** The users are categorized into sedentary, lightly, fairly
+and very active based on the minutes of their activity throughout the
+day. A box plot is a suitable graph to compare these user types based on
+median, quartiles and outliers.The average calories burnt by the users
+gradually increases starting from sedentary to very active individuals.
+Surprisingly, light and fairly active individuals do not show much
+difference in burning the calories however, the median calorie burnt for
+fairly active individuals is less than the lightly active individuals.
+Very active individuals are almost burning 3000 calories on an average
+per day.
+
+**Q2. Does burning calories have correlation with the number of
+steps/distance that users travel?**
+
+```{r, echo=FALSE, warning=FALSE}
+daily_data %>%
+summarise(
+distance = factor(case_when(
+    TotalDistance < 5 ~ "< 5 mi",
+    TotalDistance >= 5 & TotalDistance <= 7 ~ "5 > & < 7 mi",
+    TotalDistance > 7 ~ "> 7 mi",
+),levels = c("> 7 mi","5 > & < 7 mi","< 5 mi")),
+steps = factor(case_when(
+    TotalSteps < 6000 ~ "< 6k steps",
+    TotalSteps >= 6000 & TotalSteps <= 10000 ~ "6k > & < 10k Steps",
+    TotalSteps > 10000 ~ "> 10k Steps",
+),levels = c("> 10k Steps","6k > & < 10k Steps","< 6k steps")),
+Calories) %>%
+ggplot(aes(steps,Calories,fill=steps)) +
+    geom_boxplot() +
+    scale_fill_brewer(palette = "Pastel2")+
+    custom_theme()+
+    facet_wrap(~distance)+
+    labs(title="Calories burned by Steps and Distance",x=NULL) +
+    theme(legend.position="none", text = element_text(size = 20),plot.title = element_text(hjust = 0.5), 
+          axis.text.x = element_text(size= 10, angle = 45, vjust = 1, hjust=1))+
+  theme(strip.text = element_text(colour = 'black', size = 8)) +
+  theme(strip.background = element_rect(fill = "beige", color = 'black'))
+
+```
+
+**Insight:** The users are categorized based on the distance traveled
+(Less than 5 Miles, 5 to 7 miles and more than 7 miles) as well as
+Number of steps taken (less than 6000, 6000 to 10000 and more than
+10000). Based on the summary values, this Boxplot shows the calories
+burned by the three categories of steps, which are then faceted by the
+three categories of distance traveled. It determines which component is
+more crucial to the number of calories burned, and it's interesting to
+note that the most calories are burned by the "6,000 \> 10,000 Steps"
+and "\> 7 miles," which would suggest some sort of running activity that
+allows participants to cover more distance with fewer steps.
+
+It is also intriguing to see that, the similarity between the "\> 10,000
+Steps" in the mean distance section and the "6,000 Steps" in the low
+distance section, which supports the notion that speed is the primary
+determinant of calories burned.
+
+**Q3. What hour of the day is the most popular in users to burn
+calories?**
+
+```{r,echo=FALSE}
+hourly_calories <- read.csv("/Users/aryakbodkhe/Desktop/Comp Viz/Hackathon/Fitabase Data 4.12.16-5.12.16/hourlyCalories_merged.csv")
+hourly_calories <- hourly_calories %>%
+  distinct() %>%
+  drop_na()
+
+hourly_calories <- rename_with(hourly_calories, tolower)
+
+hourly_calories <- hourly_calories %>%
+  rename(date_time = activityhour) %>%
+  mutate(date_time = as.POSIXct(date_time, format = "%m/%d/%Y %I:%M:%S %p", tz = Sys.timezone()))%>%
+  mutate(date_time = format(date_time, format = "-%Y-%m-%d %H"))
+
+hourly_calories <- hourly_calories %>%
+  separate(date_time, into = c("date", "time"), sep = " ") %>%
+  mutate(date = ymd(date)) 
+
+```
+
+```{r,echo=FALSE, warning=FALSE}
+hourly_calories %>%
+  group_by(time) %>%
+  summarise(average_calories = mean(calories)) %>%
+  ggplot(mapping = aes(x = time, y = average_calories, fill = average_calories)) +
+  geom_col() +
+  labs(title = "Calories burnt throughout the day", x = "", y = "", fill = "Average Calories") +
+  theme(axis.text.x = element_text(angle = 0))+
+  ylim(-20,130) +
+  coord_polar(start = 0)+
+  custom_theme()+
+  scale_fill_gradient(low = "LightGreen", high = "tan1")
+```
+
+**Insight:** Everyday, 5 pm to 7 pm is the most common time of the day
+when users tend to burn more calories. Users burn more than 120 calories
+per hour during this time. Other than that, the calorie burning is
+seemed to be steady throughout the day.There is a dramatic drop in the
+calorie burning activities since evening and keeps decreasing till
+midnight. During the night time, the calorie expense is steady at around
+70 calories per hour.
+
+### **CONCLUSION and SUMMARY:**
+
+-   Amount of distance traveled by the user does not affect their sleep
+    quality i.e, covering a greater distance doesn't necessarily mean
+    that the user is going to have a better sleep (on average).
+
+-   The other thing we have noticed is that slight amount of activity
+    just before going to bed can help achieve a better sleep. We can use
+    this insight and add a feature which can help users set a reminder
+    of doing some amount of activity so that they can reach that optimal
+    steps range between 5,000 and 9,999 which could help user achieve a
+    better sleep quality.
+
+-   The 33 users with different active levels have very minimal
+    difference in the total number of steps in a week.
+
+-   Most of the users are sedentary with respect to steps in minutes and
+    calories burnt.
+
+-   Counting calorie intake and burn are one of the prominent task for
+    the health conscious people. Therefore we tried to get insights from
+    the data on what are the factors affecting the calorie burn and how
+    effective they are. Its been observed that active individuals tend
+    to burn more calories than the individuals who majorly do sedentary
+    activities. Also, Running is more effective in calorie burning than
+    walking.
+
+### REFERENCES:
+
+[1]
+<https://www.kaggle.com/datasets/nurudeenabdulsalaam/fitbit-fitness-tracker-data>
